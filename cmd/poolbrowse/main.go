@@ -21,6 +21,8 @@ func main() {
 	youngFlag := flag.String("young", "0", "")
 	kidFlag := flag.String("kid", "1", "")
 	timeoutFlag := flag.Duration("timeout", 0, "")
+	showFlag := flag.Bool("show", false, "")
+
 	flag.Parse()
 
 	ctx := context.Background()
@@ -31,7 +33,7 @@ func main() {
 	}
 	var prev string
 	for {
-		err := browser.Book(hostFlag, dayFlag, turnFlag, emailFlag, dniFlag, adultFlag, youngFlag, kidFlag)
+		err := browser.Book(hostFlag, dayFlag, turnFlag, emailFlag, dniFlag, adultFlag, youngFlag, kidFlag, showFlag)
 		if err == nil {
 			fmt.Println("Reservado!")
 			return

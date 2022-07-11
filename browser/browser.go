@@ -17,7 +17,7 @@ import (
 // go run main.go -day 20 -turn T2 -email xx@gmail.com -dni 44445555X -adult 2 -young 0 -kid 1
 
 // Book does a reservation
-func Book(hostFlag, dayFlag, turnFlag, emailFlag, dniFlag, adultFlag, youngFlag, kidFlag *string) error {
+func Book(hostFlag, dayFlag, turnFlag, emailFlag, dniFlag, adultFlag, youngFlag, kidFlag *string, showFlag *bool) error {
 	if *hostFlag == "" {
 		return errors.New("host not provided")
 	}
@@ -117,35 +117,23 @@ func Book(hostFlag, dayFlag, turnFlag, emailFlag, dniFlag, adultFlag, youngFlag,
 	}
 	log.Println("action", action)
 
-	var token, turn, date string
-	doc2.Find("input").Each(func(i int, s *goquery.Selection) {
-		name, _ := s.Attr("name")
-		val, _ := s.Attr("value")
-		switch name {
-		case "__RequestVerificationToken":
-			token = val
-		case "Turno":
-			turn = val
-		case "Fecha":
-			date = val
-		}
-	})
-
-	var cookies []string
-	for _, cookie := range res2.Cookies() {
-		cookies = append(cookies, fmt.Sprintf("%s=%s", cookie.Name, cookie.Value))
-	}
-	cookie := strings.Join(cookies, "; ")
-
-	if err := book(*hostFlag, action, token, cookie, date, turn, *emailFlag, *dniFlag, *adultFlag, *youngFlag, *kidFlag); err != nil {
+	id, secret, err := book(*hostFlag, action, *emailFlag, *dniFlag, *adultFlag, *youngFlag, *kidFlag, *showFlag)
+	if err != nil {
 		return err
 	}
+	log.Println("dni", *dniFlag, "id", id, "secret", secret)
 
 	return nil
 }
 
-func book(host, action, token, cookie, date, turn, email, dni, adult, young, kid string) error {
-	ctx, cancel := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", false))...)
+func book(host, action, email, dni, adult, young, kid string, show bool) (string, string, error) {
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if show {
+		ctx, cancel = chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", false))...)
+	} else {
+		ctx, cancel = chromedp.NewContext(context.Background())
+	}
 	defer cancel()
 
 	// create chrome instance
@@ -159,7 +147,10 @@ func book(host, action, token, cookie, date, turn, email, dni, adult, young, kid
 	err := chromedp.Run(ctx,
 		chromedp.Navigate(host+action),
 	)
-	time.Sleep(1 * time.Second)
+	if err != nil {
+		return "", "", err
+	}
+	time.Sleep(500 * time.Millisecond)
 	chromedp.Run(ctx,
 		chromedp.SetValue(`input[name="Dni"]`, dni),
 		chromedp.SetValue("#Email", email),
@@ -168,13 +159,37 @@ func book(host, action, token, cookie, date, turn, email, dni, adult, young, kid
 		chromedp.SetValue(`select[name="NumEntradas2"]`, young),
 		chromedp.SetValue(`select[name="NumEntradas3"]`, kid),
 	)
-	time.Sleep(1 * time.Second)
+	time.Sleep(500 * time.Millisecond)
 	chromedp.Run(ctx,
 		chromedp.Click(`button[type="submit"]`),
 	)
-	if err != nil {
-		return err
+	time.Sleep(1000 * time.Millisecond)
+
+	var card string
+	chromedp.Run(ctx,
+		chromedp.Text(`#cardEspecial[class="col d-md-block"]`, &card),
+	)
+	fmt.Println(card)
+
+	kvs := map[string]string{}
+	lines := strings.Split(card, "\n")
+	for _, l := range lines {
+		kv := strings.SplitN(l, ":", 2)
+		if len(kv) < 2 {
+			continue
+		}
+		k := strings.Trim(kv[0], " ")
+		v := strings.Trim(kv[1], " ")
+		kvs[k] = v
 	}
-	time.Sleep(60 * time.Second)
-	return nil
+
+	id, ok := kvs["Código de reserva"]
+	if !ok {
+		return "", "", errors.New("id not found")
+	}
+	secret, ok := kvs["Código secreto"]
+	if !ok {
+		return "", "", errors.New("secret not found")
+	}
+	return id, secret, nil
 }
