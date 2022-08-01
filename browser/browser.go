@@ -127,12 +127,12 @@ func Book(hostFlag, dayFlag, turnFlag, emailFlag, dniFlag, adultFlag, youngFlag,
 }
 
 func book(host, action, email, dni, adult, young, kid string, show bool) (string, string, error) {
-	var ctx context.Context
-	var cancel context.CancelFunc
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	if show {
-		ctx, cancel = chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", false))...)
+		ctx, cancel = chromedp.NewExecAllocator(ctx, append(chromedp.DefaultExecAllocatorOptions[:], chromedp.Flag("headless", false))...)
 	} else {
-		ctx, cancel = chromedp.NewContext(context.Background())
+		ctx, cancel = chromedp.NewContext(ctx)
 	}
 	defer cancel()
 
@@ -144,31 +144,36 @@ func book(host, action, email, dni, adult, young, kid string, show bool) (string
 	defer cancel()
 
 	// login
-	err := chromedp.Run(ctx,
+	if err := chromedp.Run(ctx,
 		chromedp.Navigate(host+action),
-	)
-	if err != nil {
+	); err != nil {
 		return "", "", err
 	}
 	time.Sleep(500 * time.Millisecond)
-	chromedp.Run(ctx,
+	if err := chromedp.Run(ctx,
 		chromedp.SetValue(`input[name="Dni"]`, dni),
 		chromedp.SetValue("#Email", email),
 		chromedp.SetValue("#EmailTemp", email),
 		chromedp.SetValue(`select[name="NumEntradas1"]`, adult),
 		chromedp.SetValue(`select[name="NumEntradas2"]`, young),
 		chromedp.SetValue(`select[name="NumEntradas3"]`, kid),
-	)
+	); err != nil {
+		return "", "", err
+	}
 	time.Sleep(500 * time.Millisecond)
-	chromedp.Run(ctx,
+	if err := chromedp.Run(ctx,
 		chromedp.Click(`button[type="submit"]`),
-	)
+	); err != nil {
+		return "", "", err
+	}
 	time.Sleep(1000 * time.Millisecond)
 
 	var card string
-	chromedp.Run(ctx,
+	if err := chromedp.Run(ctx,
 		chromedp.Text(`#cardEspecial[class="col d-md-block"]`, &card),
-	)
+	); err != nil {
+		return "", "", err
+	}
 	fmt.Println(card)
 
 	kvs := map[string]string{}
