@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/igolaizola/poolbot/browser"
@@ -34,14 +35,18 @@ func main() {
 	var prev string
 	for {
 		err := browser.Book(hostFlag, dayFlag, turnFlag, emailFlag, dniFlag, adultFlag, youngFlag, kidFlag, showFlag)
-		if err == nil {
+		switch {
+		case err == nil:
 			fmt.Println("Reservado!")
 			return
+		case strings.Contains(err.Error(), "stream error: stream ID"):
+		default:
+			if err.Error() != prev {
+				log.Println(err)
+			}
+			prev = err.Error()
 		}
-		if err.Error() != prev {
-			log.Println(err)
-		}
-		prev = err.Error()
+
 		select {
 		case <-time.After(5 * time.Second):
 			continue
